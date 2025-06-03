@@ -24,6 +24,7 @@ class HmClient:
     def __init__(self, serial: str):
         self.hdc = HdcWrapper(serial)
         self.sock = None
+        self.serial = serial
 
     @cached_property
     def local_port(self):
@@ -152,11 +153,13 @@ class HmClient:
             if self.sock:
                 self.sock.close()
                 self.sock = None
-
-            self._rm_local_port()
-
+            os.popen(f"hdc -t {self.serial} fport rm tcp:{self.local_port} tcp:{UITEST_SERVICE_PORT}").readlines()
+            # 使用这个会导致线程未正确释放无法结束
+            # self._rm_local_port()
         except Exception as e:
-            logger.error(f"An error occurred: {e}")
+            os.popen(f"hdc -t {self.serial} fport rm tcp:{self.local_port} tcp:{UITEST_SERVICE_PORT}").readlines()
+            logger.info(f"尝试停止: {e}")
+            # logger.error(f"An error occurred: {e}")
 
     def _create_hdriver(self) -> DriverData:
         logger.debug("Create uitest driver")

@@ -30,9 +30,9 @@ class _XPath:
             raw_bounds: str = node.attrib.get("bounds")  # [832,1282][1125,1412]
             bounds: Bounds = parse_bounds(raw_bounds)
             logger.debug(f"{xpath} Bounds: {bounds}")
-            return _XMLElement(bounds, self._d)
+            return _XMLElement(bounds, self._d, hierarchy, xpath)
 
-        return _XMLElement(None, self._d)
+        return _XMLElement(None, self._d, hierarchy, xpath)
 
     @staticmethod
     def _sanitize_text(text: str) -> str:
@@ -58,9 +58,29 @@ class _XPath:
 
 
 class _XMLElement:
-    def __init__(self, bounds: Bounds, d: Driver):
+    def __init__(self, bounds: Bounds, d: Driver, hierarchy: Dict, xpath: str):
         self.bounds = bounds
         self._d = d
+        self.hierarchy = hierarchy
+        self.xpath = xpath
+
+    def info(self):
+        _rename_key = {
+            "checkable": "isChecked"
+        }
+        if not self.hierarchy or not self.xpath:
+            return {}
+        xml = _XPath._json2xml(self.hierarchy)
+        result = xml.xpath(self.xpath)
+        if len(result) > 0:
+            node = result[0]
+            info = dict(node.attrib)
+            return_info = self._rename_keys_func(info, _rename_key)
+            return return_info
+        return {}
+    
+    def _rename_keys_func(self, info: Dict, rename_key: Dict) -> Dict:
+        return {rename_key.get(k, k): v for k, v in info.items()}
 
     def _verify(self):
         if not self.bounds:

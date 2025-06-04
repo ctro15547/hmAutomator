@@ -190,23 +190,30 @@ class UiObject:
         return Point(**_raw)
 
     @property
-    def info(self) -> ElementInfo:
-        return ElementInfo(
-            id=self.id,
-            key=self.key,
-            type=self.type,
-            text=self.text,
-            description=self.description,
-            isSelected=self.isSelected,
-            isChecked=self.isChecked,
-            isEnabled=self.isEnabled,
-            isFocused=self.isFocused,
-            isCheckable=self.isCheckable,
-            isClickable=self.isClickable,
-            isLongClickable=self.isLongClickable,
-            isScrollable=self.isScrollable,
-            bounds=self.bounds,
-            boundsCenter=self.boundsCenter)
+    def info(self):
+        return {
+        "id": self.id,
+        "key": self.key,
+        "type": self.type,
+        "text": self.text,
+        "description": self.description,
+        "isSelected": self.isSelected,
+        "isChecked": self.isChecked,
+        "isEnabled": self.isEnabled,
+        "isFocused": self.isFocused,
+        "isCheckable": self.isCheckable,
+        "isClickable": self.isClickable,
+        "isLongClickable": self.isLongClickable,
+        "isScrollable": self.isScrollable,
+        "bounds": self.bounds,
+        "center": self._get_center(self.bounds)
+        # "boundsCenter": self.boundsCenter
+    }
+
+    def _get_center(self, info):
+        
+        return Point(int((info['left']+ info['right']) / 2),
+                     int((info['top'] + info['bottom']) / 2))
 
     @delay
     def click(self):

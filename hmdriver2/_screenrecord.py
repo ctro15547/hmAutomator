@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import os
+import time
 import typing
 import threading
 import numpy as np
@@ -178,4 +180,27 @@ class RecordClient(HmClient):
     def stop_record(self):
         self._record_event.set()
         self._record_status = False
+    
+    def screenshot(self, path: str):
+        if not self.screen_server_status:
+            raise ScreenRecordError("Screen server is not running.")
+        
+        # 如果文件已存在，先删除
+        if os.path.exists(path):
+            os.remove(path)
+            
+        # 将screenshot_data写入文件
+        with open(path, "wb") as f:
+            f.write(self.screenshot_data)
+            
+        # 等待文件写入完成
+        time.sleep(0.02)
+        
+        # 检查文件是否成功创建
+        is_success = os.path.exists(path)
+        
+        return {
+            "path": path,
+            "is_success": is_success
+        }
 

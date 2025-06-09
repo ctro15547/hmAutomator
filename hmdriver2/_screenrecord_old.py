@@ -22,14 +22,7 @@ class RecordClient(HmClient):
         self.video_path = None
         self.jpeg_queue = queue.Queue()
         self.threads: typing.List[threading.Thread] = []
-
-        # 屏幕服务状态
-        self._stop_event = threading.Event()
-        self.screen_server_status = False
-
-        # 录屏状态
-        self._record_event = threading.Event()
-        self._record_status = False
+        self.stop_event = threading.Event()
 
         self.target_width, self.target_height = self.d.display_size
 
@@ -40,7 +33,7 @@ class RecordClient(HmClient):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop_screen_server()
+        self.stop()
 
     def _send_msg(self, api: str, args: list):
         _msg = {
@@ -53,13 +46,39 @@ class RecordClient(HmClient):
             "request_id": datetime.now().strftime("%Y%m%d%H%M%S%f")
         }
         super()._send_msg(_msg)
-    
-    def _get_data(self, api: str, args: list):
+
+    def start(self, video_path: str):
+        logger.info("Start RecordClient connection")
+
+        self._connect_sock()
+
+        self.video_path = video_path
+
+        self._send_msg("startCaptureScreen", [])
+
+        reply: str = self._recv_msg(1024, decode=True, print=False)
+        if "true" in reply:
+            record_th = threading.Thread(target=self._record_worker)
+            writer_th = threading.Thread(target=self._video_writer)
+            record_th.daemon = True
+            writer_th.daemon = True
+            record_th.start()
+            writer_th.start()
+            self.threads.extend([record_th, writer_th])
+        else:
+            raise ScreenRecordError("Failed to start device screen capture.")
+
+        return self
+
+    def _record_worker(self):
+        """Capture screen frames and save current frames."""
+
         # JPEG start and end markers.
         start_flag = b'\xff\xd8'
         end_flag = b'\xff\xd9'
         buffer = bytearray()
-        while not self._stop_event.is_set():
+        count = 0
+        while not self.stop_event.is_set():
             try:
                 buffer += self._recv_msg(4096 * 1024, decode=False, print=False)
             except Exception as e:
@@ -70,57 +89,15 @@ class RecordClient(HmClient):
             end_idx = buffer.find(end_flag)
             while start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                 # Extract one JPEG image
-                self.screenshot_data = buffer[start_idx:end_idx + 2]
-                if self._record_status:
-                    self.jpeg_queue.put(self.screenshot_data)
-                # self.jpeg_queue.put(jpeg_image)
+                jpeg_image: bytearray = buffer[start_idx:end_idx + 2]
+                self.jpeg_queue.put(jpeg_image)
 
                 buffer = buffer[end_idx + 2:]
 
                 # Search for the next JPEG image in the buffer
                 start_idx = buffer.find(start_flag)
                 end_idx = buffer.find(end_flag)
-
-    def start_screen_server(self):
-        logger.info("Start RecordClient connection")
-
-        self._connect_sock()
-
-        self._send_msg("startCaptureScreen", [])
-
-        reply: str = self._recv_msg(1024, decode=True, print=False)
-        if "true" in reply:
-            self._stop_event.clear()
-            record_th = threading.Thread(target=self._get_data)
-            record_th.daemon = True
-            record_th.start()
-            self.screen_server_status = True
-            self.threads.append(record_th) 
-        else:
-            raise ScreenRecordError("Failed to start device screen capture.")
-
-        return self
-    
-    def stop_screen_server(self):
-        try:
-            self._stop_event.set()
-            self.screen_server_status = False
-            self._record_event.set()
-            self._record_status = False
-            for t in self.threads:
-                t.join()
-
-            self._send_msg("stopCaptureScreen", [])
-            self._recv_msg(1024, decode=True, print=False)
-
-            self.release()
-
-            # Invalidate the cached property
-            self.d._invalidate_cache('screenrecord')
-
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
-
+                count += 1
 
     def _video_writer(self):
         """Write frames to video file."""
@@ -130,9 +107,9 @@ class RecordClient(HmClient):
         target_width = int(self.target_width * 0.5)
         target_height = int(self.target_height * 0.5)
         quality = 30
-        while not self._record_event.is_set():
+        while not self.stop_event.is_set():
             try:
-                jpeg_image = self.jpeg_queue.get(timeout=0.1)
+                jpeg_image = self.jpeg_queue.get(timeout=0.05)
                 img = cv2.imdecode(np.frombuffer(jpeg_image, np.uint8), cv2.IMREAD_COLOR)
 
                 # === 新增：分辨率调整 ===
@@ -163,17 +140,22 @@ class RecordClient(HmClient):
 
         if cv2_instance:
             cv2_instance.release()
-    
-    def start_record(self, video_path: str):
-        self.video_path = video_path
-        self._record_event.clear()
-        self._record_status = True
-        t = threading.Thread(target=self._video_writer)
-        t.daemon = True
-        t.start()
-        self.threads.append(t)
 
-    def stop_record(self):
-        self._record_event.set()
-        self._record_status = False
+    def stop(self) -> str:
+        try:
+            self.stop_event.set()
+            for t in self.threads:
+                t.join()
 
+            self._send_msg("stopCaptureScreen", [])
+            self._recv_msg(1024, decode=True, print=False)
+
+            self.release()
+
+            # Invalidate the cached property
+            self.d._invalidate_cache('screenrecord')
+
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+
+        return self.video_path

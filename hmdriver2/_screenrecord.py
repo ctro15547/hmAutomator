@@ -121,7 +121,6 @@ class RecordClient(HmClient):
         except Exception as e:
             logger.error(f"An error occurred: {e}")
 
-
     def _video_writer(self):
         """Write frames to video file."""
         cv2_instance = None
@@ -165,6 +164,9 @@ class RecordClient(HmClient):
             cv2_instance.release()
     
     def start_record(self, video_path: str):
+        if not self.screen_server_status:
+            raise ScreenRecordError("Screen server is not running.")
+
         self.video_path = video_path
         self._record_event.clear()
         self._record_status = True

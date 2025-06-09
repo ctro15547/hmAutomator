@@ -10,6 +10,7 @@ class hm_ctx:
     def __init__(self, d):
         self.d = d
         self.check_list = []
+        self.cell_list = []
         self.ui_json = {}
         self.loop_sig = True
 
@@ -18,6 +19,11 @@ class hm_ctx:
             self.check_list.append({kwargs['text']: 'text'})
         if 'textMatches' in kwargs:
             self.check_list.append({kwargs['textMatches']: 'textMatches'})
+        if 'xpath' in kwargs:
+            self.check_list.append({kwargs['xpath']: 'xpath'})
+        if 'cell' in kwargs:
+            # cell=lambda: (print(1), print(2)) if d(text='123').exists() else print('error')
+            self.cell_list.append(kwargs['cell'])
 
     def _get_ui_json(self):
         _tmp_path = f"/data/local/tmp/{self.d.serial}_tmp.json"
@@ -90,6 +96,13 @@ class hm_ctx:
                     controls_found = self._find_control(data=self.ui_json, textMatches=search_value)
                 elif search_type == 'text':
                     controls_found = self._find_control(data=self.ui_json, text=search_value)
+                elif search_type == 'xpath':
+                    self.d.xpath(search_value).click_if_exists()
+                    return
+                elif search_type == 'cell':
+                    for _cell in self.cell_list:
+                        _cell()
+                        return
                 
                 for control_element in controls_found:
                     if self._click_control(control_element):

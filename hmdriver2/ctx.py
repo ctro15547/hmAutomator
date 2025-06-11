@@ -14,7 +14,7 @@ class hm_ctx:
         self.ui_json = {}
         self.loop_sig = True
 
-    def append_check_list(self, **kwargs):
+    def __call__(self, **kwargs):
         if 'text' in kwargs:
             self.check_list.append({kwargs['text']: 'text'})
         if 'textMatches' in kwargs:
@@ -24,6 +24,7 @@ class hm_ctx:
         if 'cell' in kwargs:
             # cell=lambda: (print(1), print(2)) if d(text='123').exists() else print('error')
             self.cell_list.append(kwargs['cell'])
+        return self
 
     def _get_ui_json(self):
         _tmp_path = f"/data/local/tmp/{self.d.serial}_tmp.json"
@@ -90,6 +91,13 @@ class hm_ctx:
     
     def _find_and_click_control(self):
         for check_item in self.check_list:
+            if 'cell' in check_item:
+                for _cell in self.cell_list:
+                    try:
+                        _cell()
+                    except:
+                        pass
+                    return
             for search_value, search_type in check_item.items():
                 controls_found = []
                 if search_type == 'textMatches':
@@ -99,11 +107,6 @@ class hm_ctx:
                 elif search_type == 'xpath':
                     self.d.xpath(search_value).click_if_exists()
                     return
-                elif search_type == 'cell':
-                    for _cell in self.cell_list:
-                        _cell()
-                        return
-                
                 for control_element in controls_found:
                     if self._click_control(control_element):
                         return  # 成功点击后立即退出方法
@@ -122,3 +125,13 @@ class hm_ctx:
 
     def stop(self):
         self.loop_sig = False
+        self.ui_json = {}
+    
+    def click(self):
+        ...
+
+
+if __name__ == '__main__':
+
+    ctx = hm_ctx(d)
+    ctx(text='123').click()

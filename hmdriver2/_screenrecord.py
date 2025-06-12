@@ -66,6 +66,7 @@ class RecordClient(HmClient):
                 buffer += self._recv_msg(4096 * 1024, decode=False, print=False)
             except Exception as e:
                 print(f"Error receiving data: {e}")
+                self._stop_event.set()
                 break
 
             start_idx = buffer.find(start_flag)
@@ -73,12 +74,7 @@ class RecordClient(HmClient):
             while start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                 # Extract one JPEG image
                 self.screenshot_data = buffer[start_idx:end_idx + 2]
-                if self._record_status:
-                    self.jpeg_queue.put(self.screenshot_data)
-                # self.jpeg_queue.put(jpeg_image)
-
                 buffer = buffer[end_idx + 2:]
-
                 # Search for the next JPEG image in the buffer
                 start_idx = buffer.find(start_flag)
                 end_idx = buffer.find(end_flag)
@@ -128,13 +124,17 @@ class RecordClient(HmClient):
         cv2_instance = None
         img = None
 
+        # 分辨率
         target_width = int(self.target_width * 0.5)
         target_height = int(self.target_height * 0.5)
+        # 质量
         quality = 30
+        # 帧率
+        fps = 10
         while not self._record_event.is_set():
+            start_time = time.time()
             try:
-                jpeg_image = self.jpeg_queue.get(timeout=0.1)
-                img = cv2.imdecode(np.frombuffer(jpeg_image, np.uint8), cv2.IMREAD_COLOR)
+                img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
 
                 # === 新增：分辨率调整 ===
                 scaled_img = cv2.resize(
@@ -158,9 +158,10 @@ class RecordClient(HmClient):
                 continue
             if cv2_instance is None:
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                cv2_instance = cv2.VideoWriter(self.video_path, fourcc, 10, (target_width, target_height))
+                cv2_instance = cv2.VideoWriter(self.video_path, fourcc, fps, (target_width, target_height))
 
             cv2_instance.write(img)
+            time.sleep(max(0, 1 / fps - (time.time() - start_time)))
 
         if cv2_instance:
             cv2_instance.release()

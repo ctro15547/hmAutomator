@@ -7,6 +7,7 @@ import threading
 import numpy as np
 import queue
 from datetime import datetime
+import subprocess
 
 import cv2
 
@@ -121,7 +122,7 @@ class RecordClient(HmClient):
 
     def _video_writer(self):
         """Write frames to video file."""
-        cv2_instance = None
+        
         img = None
 
         # 分辨率
@@ -131,10 +132,43 @@ class RecordClient(HmClient):
         quality = 30
         # 帧率
         fps = 10
+        
+        frame_count = 0
+        
+        # 确保使用AVI格式和MJPG编码器，提高可靠性
+        video_path = os.path.splitext(self.video_path)[0] + '.avi'
+        
+        # 创建视频写入器
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        cv2_instance = cv2.VideoWriter(
+            video_path,
+            fourcc,
+            fps,
+            (target_width, target_height)
+        )
+        
+        if not cv2_instance.isOpened():
+            logger.error(f"无法创建视频写入器: {video_path}")
+            return
+            
+        logger.info(f"使用AVI格式和MJPG编码器录制到: {video_path}")
+        
+        # 保存计时器
+        save_interval = 10  # 每10秒记录一次日志
+        last_save_time = time.time()
+        
         while not self._record_event.is_set():
-            start_time = time.time()
+            current_time = time.time()
+            start_time = current_time
+            
             try:
+                if self.screenshot_data is None:
+                    time.sleep(0.1)
+                    continue
+                    
                 img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
+                if img is None or img.size == 0:
+                    continue
 
                 # === 新增：分辨率调整 ===
                 scaled_img = cv2.resize(
@@ -149,23 +183,40 @@ class RecordClient(HmClient):
                     scaled_img,  # 使用缩放后的图像
                     [int(cv2.IMWRITE_JPEG_QUALITY), quality]
                 )
-
-                compressed_bytes = compressed_jpeg.tobytes()
-                img = cv2.imdecode(np.frombuffer(compressed_bytes, np.uint8), cv2.IMREAD_COLOR)
-            except queue.Empty:
-                pass
-            if img is None or img.size == 0:
-                continue
-            if cv2_instance is None:
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                cv2_instance = cv2.VideoWriter(self.video_path, fourcc, fps, (target_width, target_height))
-
-            cv2_instance.write(img)
+                
+                # 解码压缩后的JPEG数据
+                img = cv2.imdecode(np.frombuffer(compressed_jpeg, np.uint8), cv2.IMREAD_COLOR)
+                if img is None or img.size == 0:
+                    continue
+                    
+                # 写入视频帧
+                cv2_instance.write(img)
+                frame_count += 1
+                
+                # 每10秒强制刷新视频文件
+                if current_time - last_save_time >= save_interval:
+                    # 在某些平台上，可以尝试调用flush方法（如果可用）
+                    try:
+                        if hasattr(cv2_instance, 'flush'):
+                            cv2_instance.flush()
+                    except:
+                        pass
+                        
+                    logger.info(f"视频录制中: {video_path}，已写入{frame_count}帧")
+                    last_save_time = current_time
+                    
+            except Exception as e:
+                logger.error(f"处理视频帧时出错: {e}")
+                
             time.sleep(max(0, 1 / fps - (time.time() - start_time)))
 
-        if cv2_instance:
-            cv2_instance.release()
-    
+        # 录制结束，关闭资源
+        cv2_instance.release()
+        logger.info(f"录制结束，视频已保存: {video_path}")
+        
+        # 更新实际使用的视频路径
+        self.video_path = video_path
+
     def start_record(self, video_path: str):
         if not self.screen_server_status:
             raise ScreenRecordError("Screen server is not running.")

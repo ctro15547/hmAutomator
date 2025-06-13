@@ -10,20 +10,26 @@ class hm_ctx:
     def __init__(self, d):
         self.d = d
         self.check_list = []
-        self.cell_list = []
+        self.call_list = []
+        self.xpath_list = []
         self.ui_json = {}
-        self.loop_sig = True
+        self.loop_sig = False
 
     def __call__(self, **kwargs):
-        if 'text' in kwargs:
+        if 'call' in kwargs and ('text' in kwargs or 'textMatches' in kwargs):
+            # cell=lambda: (print(1), print(2), True) if d(text='123').exists() else False
+            self.call_list.append(['text' if 'text' in kwargs else 'textMatches',
+                                   kwargs['text'] if 'text' in kwargs else kwargs['textMatches'],
+                                   kwargs['call']])
+        elif 'xpath' in kwargs and ('text' in kwargs or 'textMatches' in kwargs):
+            self.xpath_list.append(['text' if 'text' in kwargs else 'textMatches',
+                                    kwargs['text'] if 'text' in kwargs else kwargs['textMatches'], 
+                                    kwargs['xpath']])
+        # ====================这上面要条件限制才行====================
+        elif 'text' in kwargs:
             self.check_list.append({kwargs['text']: 'text'})
-        if 'textMatches' in kwargs:
+        elif 'textMatches' in kwargs:
             self.check_list.append({kwargs['textMatches']: 'textMatches'})
-        if 'xpath' in kwargs:
-            self.check_list.append({kwargs['xpath']: 'xpath'})
-        if 'cell' in kwargs:
-            # cell=lambda: (print(1), print(2)) if d(text='123').exists() else print('error')
-            self.cell_list.append(kwargs['cell'])
         return self
 
     def _get_ui_json(self):
@@ -90,34 +96,47 @@ class hm_ctx:
         return False
     
     def _find_and_click_control(self):
+
+        for call in self.call_list:
+            _type, _text, _call = call
+            try:
+                if _type == 'text':
+                    if self._find_control(data=self.ui_json, text=_text) and _call():
+                        return
+                elif _type == 'textMatches':
+                    if self._find_control(data=self.ui_json, textMatches=_text) and _call():
+                        return
+            except:
+                pass
+
+        controls_found = []
+
         for check_item in self.check_list:
-            if 'cell' in check_item:
-                for _cell in self.cell_list:
-                    try:
-                        _cell()
-                    except:
-                        pass
-                    return
             for search_value, search_type in check_item.items():
-                controls_found = []
                 if search_type == 'textMatches':
-                    controls_found = self._find_control(data=self.ui_json, textMatches=search_value)
+                    controls_found.append(self._find_control(data=self.ui_json, textMatches=search_value))
                 elif search_type == 'text':
-                    controls_found = self._find_control(data=self.ui_json, text=search_value)
-                elif search_type == 'xpath':
-                    self.d.xpath(search_value).click_if_exists()
-                    return
-                for control_element in controls_found:
-                    if self._click_control(control_element):
-                        return  # 成功点击后立即退出方法
+                    controls_found.append(self._find_control(data=self.ui_json, text=search_value))
+
+        for control_element in controls_found:
+            if self._click_control(control_element):
+                return  # 成功点击后立即退出方法
     
     def _loop_find_and_click_control(self, time_sleep=0.1):
         while self.loop_sig:
-            self.ui_json = self._get_ui_json()
-            self._find_and_click_control()
+            try:
+                self.ui_json = self._get_ui_json()
+                self._find_and_click_control()
+            except Exception as e:
+                print('ctx loop error',e)
+                time.sleep(time_sleep)
+                continue
             time.sleep(time_sleep)
 
-    def start(self, time_sleep=0.1):
+    def start(self, time_sleep=3):
+        if self.loop_sig:
+            return
+        self.loop_sig = True
         thread = threading.Thread(target=self._loop_find_and_click_control, args=(time_sleep,))
         thread.setDaemon(True)
         thread.start()

@@ -97,8 +97,8 @@ class hm_ctx:
     
     def _find_and_click_control(self):
 
-        for call in self.call_list:
-            _type, _text, _call = call
+        for _call in self.call_list:
+            _type, _text, _call = _call
             try:
                 if _type == 'text':
                     if self._find_control(data=self.ui_json, text=_text) and _call():
@@ -108,9 +108,22 @@ class hm_ctx:
                         return
             except:
                 pass
+        
+        for x in self.xpath_list:
+            _type, _text, _xpath = x
+            try:
+                if _type == 'text':
+                    if self._find_control(data=self.ui_json, text=_text):
+                        self.d.xpath(_xpath).click()
+                        return
+                elif _type == 'textMatches':
+                    if self._find_control(data=self.ui_json, textMatches=_text):
+                        self.d.xpath(_xpath).click()
+                        return
+            except:
+                pass
 
         controls_found = []
-
         for check_item in self.check_list:
             for search_value, search_type in check_item.items():
                 if search_type == 'textMatches':

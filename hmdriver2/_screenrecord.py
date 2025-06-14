@@ -67,7 +67,7 @@ class RecordClient(HmClient):
     
     # 屏幕旋转状态
     def _get_display_rotation(self):
-        time.sleep(5)  # 等待屏幕服务启动
+        time.sleep(3)  # 等待屏幕服务启动
         if not self.screen_server_status:
             assert False, "Screen server is not running."
         
@@ -129,7 +129,11 @@ class RecordClient(HmClient):
             self.threads.append(rotation_th)
         else:
             raise ScreenRecordError("Failed to start device screen capture.")
-
+        # 倒计时5秒
+        for i in range(5, 0, -1):
+            print(f"等待屏幕服务启动: {i}秒", end="\r", flush=True)
+            time.sleep(1)
+        print("等待屏幕服务启动结束", flush=True)
         return self
     
     def stop_screen_server(self):

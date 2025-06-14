@@ -337,3 +337,18 @@ class RecordClient(HmClient):
 
         cv2.destroyWindow(window_name)
         self._show_phone_status = False
+    
+    def start_show_phone_screen(self):
+        if not self.screen_server_status:
+            raise ScreenRecordError("Screen server is not running.")
+        
+        self._show_phone_event.clear()
+        self._show_phone_status = True
+        t = threading.Thread(target=self._shwo_phone_screen)
+        t.daemon = True
+        t.start()
+        self.threads.append(t)
+
+    def stop_show_phone_screen(self):
+        self._show_phone_event.set()
+        self._show_phone_status = False

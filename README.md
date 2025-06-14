@@ -1,10 +1,10 @@
-# hmdriver2
+# hmAutomator 
 [![github actions](https://github.com/codematrixer/hmdriver2/actions/workflows/release.yml/badge.svg)](https://github.com/codematrixer/hmdriver2/actions)
 [![pypi version](https://img.shields.io/pypi/v/hmdriver2.svg)](https://pypi.python.org/pypi/hmdriver2)
 ![python](https://img.shields.io/pypi/pyversions/hmdriver2.svg)
 [![downloads](https://pepy.tech/badge/hmdriver2)](https://pepy.tech/project/hmdriver2)
 
-
+> 是hmdriver2实战化改进的分支 在真实自动化场景下总结并维护的代码
 > 写这个项目前github上已有个叫`hmdriver`的项目，但它是侵入式（需要提前在手机端安装一个testRunner app）；另外鸿蒙官方提供的hypium自动化框架，使用较为复杂，依赖繁杂。于是决定重写一套。
 
 

@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 import re
 import time
 import threading
@@ -33,18 +34,23 @@ class hm_ctx:
         return self
 
     def _get_ui_json(self):
-        _tmp_path = f"/data/local/tmp/{self.d.serial}_tmp.json"
+        _tmp_path = f"/data/local/tmp/{uuid.uuid4().hex}.json"
         cmd = f"hdc -t {self.d.serial} shell uitest dumpLayout -p {_tmp_path}"
         os.popen(cmd).readlines()  # 获取当前xml
-        cmd = f'hdc -t {self.d.serial} shell cat {_tmp_path}'
+        cmd = f'hdc -t {self.d.serial} shell cat {_tmp_path}' 
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, shell=True)
         output, error = process.communicate()
         output = output.decode('utf-8')
         error = error.decode('utf-8')
         if output:
-            return json.loads(output)
+            self.d.shell(f"rm -rf {_tmp_path}")
+            try:
+                return json.loads(output)
+            except Exception as e:
+                return {}
         else:
+            self.d.shell(f"rm -rf {_tmp_path}")
             return {}  # 当解析失败时返回空字典，避免json解析异常
     
     def _find_control(self, data, label="text", **kwargs):

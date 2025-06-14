@@ -269,14 +269,25 @@ class HdcWrapper:
         return path
 
     def dump_hierarchy(self) -> Dict:
-        _tmp_path = f"/data/local/tmp/{self.serial}_tmp.json"
-        self.shell(f"uitest dumpLayout -p {_tmp_path}")
-        try:
-            _tmp_json = os.popen(f"cat {_tmp_path}").readlines()
-            return json.loads(_tmp_json)
-        except Exception as e:
-            logger.error(f"Error loading JSON file: {e}")
-            return {}
+        _tmp_path = f"/data/local/tmp/{uuid.uuid4().hex}.json"
+        cmd = f"hdc -t {self.serial} shell uitest dumpLayout -p {_tmp_path}"
+        os.popen(cmd).readlines()  # 获取当前xml
+        cmd = f'hdc -t {self.serial} shell cat {_tmp_path}'
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, shell=True)
+        output, error = process.communicate()
+        output = output.decode('utf-8')
+        error = error.decode('utf-8')
+        if output:
+            self.shell(f"rm -rf {_tmp_path}")
+            try:
+                return json.loads(output)
+            except Exception as e:
+                logger.error(f"Error loading JSON file: {e}")
+                return {}
+        else:
+            self.shell(f"rm -rf {_tmp_path}")
+            return {}  # 当解析失败时返回空字典，避免json解析异常
 
         # with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as f:
         #     path = f.name

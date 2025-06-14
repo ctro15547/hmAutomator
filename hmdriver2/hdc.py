@@ -271,16 +271,22 @@ class HdcWrapper:
     def dump_hierarchy(self) -> Dict:
         _tmp_path = f"/data/local/tmp/{self.serial}_tmp.json"
         self.shell(f"uitest dumpLayout -p {_tmp_path}")
+        try:
+            _tmp_json = os.popen(f"cat {_tmp_path}").readlines()
+            return json.loads(_tmp_json)
+        except Exception as e:
+            logger.error(f"Error loading JSON file: {e}")
+            return {}
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as f:
-            path = f.name
-            self.recv_file(_tmp_path, path)
+        # with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as f:
+        #     path = f.name
+        #     self.recv_file(_tmp_path, path)
 
-            try:
-                with open(path, 'r', encoding='utf8') as file:
-                    data = json.load(file)
-            except Exception as e:
-                logger.error(f"Error loading JSON file: {e}")
-                data = {}
+        #     try:
+        #         with open(path, 'r', encoding='utf8') as file:
+        #             data = json.load(file)
+        #     except Exception as e:
+        #         logger.error(f"Error loading JSON file: {e}")
+        #         data = {}
 
-            return data
+        #     return data

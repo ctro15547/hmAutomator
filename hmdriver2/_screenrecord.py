@@ -21,6 +21,7 @@ class RecordClient(HmClient):
     def __init__(self, serial: str, d: Driver):
         super().__init__(serial)
         self.d = d
+        self.serial = serial
 
         self.video_path = None
         self.jpeg_queue = queue.Queue()
@@ -34,10 +35,17 @@ class RecordClient(HmClient):
         self._record_event = threading.Event()
         self._record_status = False
 
+        # 屏显状态
+        self._show_phone_event = threading.Event()  # 内部
+        self._show_phone_status = False  # 外部
+        
+
+        # 横竖屏状态 竖屏 0 横屏 1
+        self.display_rotation = 0
         self.target_width, self.target_height = self.d.display_size
 
         # 截图图片数据
-        self.screenshot_data = None
+        self.screenshot_data = bytearray()
 
     def __enter__(self):
         return self
@@ -57,6 +65,25 @@ class RecordClient(HmClient):
         }
         super()._send_msg(_msg)
     
+    # 屏幕旋转状态
+    def _get_display_rotation(self):
+        time.sleep(5)  # 等待屏幕服务启动
+        if not self.screen_server_status:
+            assert False, "Screen server is not running."
+        
+        while not self._stop_event.is_set():
+            img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
+            if img is None or img.size == 0:
+                time.sleep(0.5)
+                continue
+            
+            x, y = img.shape[1], img.shape[0]
+            if x < y:
+                self.display_rotation = 0
+            else:
+                self.display_rotation = 1
+            time.sleep(0.5)
+
     def _get_data(self, api: str, args: list):
         # JPEG start and end markers.
         start_flag = b'\xff\xd8'
@@ -79,6 +106,7 @@ class RecordClient(HmClient):
                 # Search for the next JPEG image in the buffer
                 start_idx = buffer.find(start_flag)
                 end_idx = buffer.find(end_flag)
+        self.screen_server_status = False
 
     def start_screen_server(self):
         logger.info("Start RecordClient connection")
@@ -90,11 +118,15 @@ class RecordClient(HmClient):
         reply: str = self._recv_msg(1024, decode=True, print=False)
         if "true" in reply:
             self._stop_event.clear()
-            record_th = threading.Thread(target=self._get_data)
+            record_th = threading.Thread(target=self._get_display_rotation)
             record_th.daemon = True
             record_th.start()
+            rotation_th = threading.Thread(target=self._get_display_rotation)
+            rotation_th.daemon = True
+            rotation_th.start()
             self.screen_server_status = True
             self.threads.append(record_th) 
+            self.threads.append(rotation_th)
         else:
             raise ScreenRecordError("Failed to start device screen capture.")
 
@@ -112,7 +144,7 @@ class RecordClient(HmClient):
             self._send_msg("stopCaptureScreen", [])
             self._recv_msg(1024, decode=True, print=False)
 
-            self.release()
+            # self.release()
 
             # Invalidate the cached property
             self.d._invalidate_cache('screenrecord')
@@ -216,6 +248,7 @@ class RecordClient(HmClient):
         
         # 更新实际使用的视频路径
         self.video_path = video_path
+        self._record_status = False
 
     def start_record(self, video_path: str):
         if not self.screen_server_status:
@@ -255,4 +288,52 @@ class RecordClient(HmClient):
             "path": path,
             "is_success": is_success
         }
+    
+    def _shwo_phone_screen(self):
+        if self.screen_server_status:
+            assert False, "Screen server is running."
 
+        img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
+        # 获取图片 xy
+        x, y = img.shape[1], img.shape[0]
+        if not self.display_rotation:
+            width, height = int(x / 4), int(y / 4)
+        else:
+            width, height = int(y / 4), int(x / 4)
+            
+        _tmp_display_rotation = self.d.display_rotation
+
+        window_name = f"Window_{self.serial}_{int(time.time())}"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, width, height)  # 强制新尺寸
+
+        _count = 0
+        while not self._show_phone_event.is_set() and self._show_phone_status:
+            start_time = time.time()
+            _count += 1
+
+            img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
+            if img is None or img.size == 0:
+                time.sleep(0.1)
+                continue
+
+            if _count % 10 == 0 and self.display_rotation != _tmp_display_rotation:
+                # 重新计算宽高
+                if not self.display_rotation:
+                    width, height = int(x / 4), int(y / 4)
+                else:
+                    width, height = int(y / 4), int(x / 4)
+                # 旋转后交换窗口宽高
+                window_name = f"Window_{self.serial}_{int(time.time())}"
+                cv2.destroyWindow(window_name)
+                cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(window_name, width, height)
+                _tmp_display_rotation = self.display_rotation
+
+            cv2.imshow(window_name, img)
+            cv2.waitKey(0)
+
+            time.sleep(max(0, 1 / 10 - (time.time() - start_time)))
+
+        cv2.destroyWindow(window_name)
+        self._show_phone_status = False

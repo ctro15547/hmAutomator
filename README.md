@@ -1,10 +1,92 @@
-# hmAutomator 
-[![github actions](https://github.com/codematrixer/hmdriver2/actions/workflows/release.yml/badge.svg)](https://github.com/codematrixer/hmdriver2/actions)
-[![pypi version](https://img.shields.io/pypi/v/hmdriver2.svg)](https://pypi.python.org/pypi/hmdriver2)
+# hmAutomator (HMAT)
 ![python](https://img.shields.io/pypi/pyversions/hmdriver2.svg)
-[![downloads](https://pepy.tech/badge/hmdriver2)](https://pepy.tech/project/hmdriver2)
 
-> 是hmdriver2实战化改进的分支 在真实自动化场景下总结并维护的代码, 但是有一点，本人没有鸿蒙系统设备，这个仓库的代码仅作为demo参考，实际使用请自行做本地化修改
+# 介绍
+hmautomator是hmdriver2经过实战化改进的分支 (后面简称HMAT)
+
+在真实自动化场景下总结并维护的代码, 针对实际使用过程中一些痛点进行调整优化和更新
+
+这个仓库的代码仅作为demo参考，实际使用请自行做本地化修改
+
+ps：可以经过简单的修改移植到py3.7中使用
+
+## 优化和修改
+### 1. 重写屏幕显示相关方法
+  - 将屏幕服务独立开启和关闭 （屏幕相关方法都要开启服务）
+    - 修改之前stop录屏以后整个sock被释放掉的问题 
+  - 录屏
+    - 优化录屏逻辑，改成可分段录制不会终止屏幕数据传输
+    - 原录屏方法帧率不可控，可调整帧率、录屏质量来控制录文件大小
+    - 改用avi编码保证中断后录屏完整性
+  - 投屏显示（类似scrpy） 、投屏操作（等待下次更新）
+  - 新增截图
+### 2.增加简易版WatchContext
+  - 能够简易拦截弹窗
+  - 支持text、textMatches、lambda、xpath
+  - 好像由于驱动原因目前循环建议3秒以上 (后续再看是否能够优化)
+### 3.hmdriver2使用过程中发现的问题与解决
+  - 创建Driver对象后脚本无法正确停止 
+    - 将release方法进行调整, 初步怀疑是close后执行某些命令时候线程已经终止但是命令还没执行完导致脚本挂起无法关闭
+```python
+      if self.sock:
+                self.sock.close()
+                self.sock = None
+            os.popen(f"hdc -t {self.serial} fport rm tcp:{self.local_port} tcp:{UITEST_SERVICE_PORT}").readlines()
+            # 使用这个会导致线程未正确释放无法结束
+            # self._rm_local_port()
+```
+  - d.info获取信息报错
+    - 初步怀疑是新手机信息中的display信息更新有关，但作者没有继续更新，所以先选择疲敝
+    - 目前HMAT中按照u2的习惯返回字典类型
+    - 后续根据实际使用过程中会屏蔽掉一些不常用的关键字加快轮询速度或者将添加单独查询某个元素
+```python
+return {
+        "id": self.id,
+        "key": self.key,
+        "type": self.type,
+        "text": self.text,
+        "description": self.description,
+        "isSelected": self.isSelected,
+        "isChecked": self.isChecked,
+        "isEnabled": self.isEnabled,
+        "isFocused": self.isFocused,
+        "isCheckable": self.isCheckable,
+        "isClickable": self.isClickable,
+        "isLongClickable": self.isLongClickable,
+        "isScrollable": self.isScrollable,
+        "bounds": self.bounds,
+        "center": self._get_center(self.bounds)
+        # "boundsCenter": self.boundsCenter
+    }
+```
+  - d.dump_hierarchy()使用过程中产生tmp文件没有清理
+    - 使用ctx频繁获取页面元素json的时候会产生较多的tmp文件
+    - 现HMAT中会进行清理并且使用shell cat 不用在pc端上保存文件
+```python
+def dump_hierarchy(self) -> Dict:
+        _tmp_path = f"/data/local/tmp/{uuid.uuid4().hex}.json"
+        cmd = f"hdc -t {self.serial} shell uitest dumpLayout -p {_tmp_path}"
+        os.popen(cmd).readlines()  # 获取当前xml
+        cmd = f'hdc -t {self.serial} shell cat {_tmp_path}'
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, shell=True)
+        output, error = process.communicate()
+        output = output.decode('utf-8')
+        error = error.decode('utf-8')
+        if output:
+            self.shell(f"rm -rf {_tmp_path}")
+            try:
+                return json.loads(output)
+            except Exception as e:
+                logger.error(f"Error loading JSON file: {e}")
+                return {}
+        else:
+            self.shell(f"rm -rf {_tmp_path}")
+            return {}  # 当解析失败时返回空字典，避免json解析异常
+```
+---
+
+###  hmdriver2
 > 写这个项目前github上已有个叫`hmdriver`的项目，但它是侵入式（需要提前在手机端安装一个testRunner app）；另外鸿蒙官方提供的hypium自动化框架，使用较为复杂，依赖繁杂。于是决定重写一套。
 
 
@@ -13,9 +95,9 @@
 ![arch](https://i.ibb.co/d603wQn/arch.png)
 
 
-*微信交流群（永久生效）*
+<!-- *微信交流群（永久生效）* -->
 
-<img src="https://i.ibb.co/Xx9HcKk/wechat.png" alt="wechat" style="float: left" />
+<!-- <img src="https://i.ibb.co/Xx9HcKk/wechat.png" alt="wechat" style="float: left" /> -->
 
 # Key idea
 - **无侵入式**

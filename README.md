@@ -84,8 +84,19 @@ def dump_hierarchy(self) -> Dict:
             self.shell(f"rm -rf {_tmp_path}")
             return {}  # 当解析失败时返回空字典，避免json解析异常
 ```
+### CTX
+  - HMAT中增加了ctx的简易实现，能够拦截弹窗并且支持text、textMatches、lambda、xpath等方式
+  ```python
+  from hmAutomator.ctx import hm_ctx
+  from hmdriver2.driver import Driver
+  d = Driver()
+  ctx = hm_ctx(d)
+  ctx(text="123").click()
+  ctx(textMatches=".*123.*").click()
+  ctx(xpath='//*[@text="123"]').click()
+  ctx(text="123", call=lambda: (d(text='321').click_if_exists(), True) if d(text='123').exists() else (False,)).click()
+  ```
 ---
-
 ###  hmdriver2
 > 写这个项目前github上已有个叫`hmdriver`的项目，但它是侵入式（需要提前在手机端安装一个testRunner app）；另外鸿蒙官方提供的hypium自动化框架，使用较为复杂，依赖繁杂。于是决定重写一套。
 

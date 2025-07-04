@@ -88,7 +88,7 @@ def dump_hierarchy(self) -> Dict:
   - HMAT中增加了ctx的简易实现，能够拦截弹窗并且支持text、textMatches、lambda、xpath等方式
   ```python
   from hmAutomator.ctx import hm_ctx
-  from hmdriver2.driver import Driver
+  from hmAutomator.driver import Driver
   d = Driver()
   ctx = hm_ctx(d)
   ctx(text="123").click()

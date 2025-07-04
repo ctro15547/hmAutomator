@@ -18,7 +18,7 @@ class hm_ctx:
 
     def __call__(self, **kwargs):
         if 'call' in kwargs and ('text' in kwargs or 'textMatches' in kwargs):
-            # cell=lambda: (print(1), print(2), True) if d(text='123').exists() else False
+            # cell=lambda: (print(1), print(2), True) if d(text='123').exists() else (False,)
             self.call_list.append(['text' if 'text' in kwargs else 'textMatches',
                                    kwargs['text'] if 'text' in kwargs else kwargs['textMatches'],
                                    kwargs['call']])

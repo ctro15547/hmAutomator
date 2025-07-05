@@ -84,7 +84,7 @@ def dump_hierarchy(self) -> Dict:
             self.shell(f"rm -rf {_tmp_path}")
             return {}  # 当解析失败时返回空字典，避免json解析异常
 ```
-### CTX
+## CTX
   - HMAT中增加了ctx的简易实现，能够拦截弹窗并且支持text、textMatches、lambda、xpath等方式
   ```python
   from hmAutomator.ctx import hm_ctx
@@ -96,6 +96,34 @@ def dump_hierarchy(self) -> Dict:
   ctx(xpath='//*[@text="123"]').click()
   ctx(text="123", call=lambda: (d(text='321').click_if_exists(), True) if d(text='123').exists() else (False,)).click()
   ```
+## 屏幕录制/显示/截图
+- 启动服务
+``` python
+from hmdriver2.driver import Driver
+d = Driver()
+d.screenrecord.start_screen_server()  # 先要启动服务
+# 操作
+...
+d.screenrecord.stop_screen_server()  # 用完后停止服务
+```
+- 录制/截图/显示屏幕
+``` python
+from hmdriver2.driver import Driver
+d = Driver()
+d.screenrecord.start_screen_server()  # 先要启动服务
+# 录制
+d.screenrecord.start_record(video_path='abc.avi')  # 开始录制
+
+d.screenrecord.start_show_phone_screen()  # 显示屏幕
+
+d.screenrecord.screenshot('')
+
+d.screenrecord.stop_show_phone_screen()  # 结束显示屏幕
+
+d.screenrecord.stop_record()  # 停止录制
+
+d.screenrecord.stop_screen_server()  # 用完后停止服务
+```
 ---
 ###  hmdriver2
 > 写这个项目前github上已有个叫`hmdriver`的项目，但它是侵入式（需要提前在手机端安装一个testRunner app）；另外鸿蒙官方提供的hypium自动化框架，使用较为复杂，依赖繁杂。于是决定重写一套。

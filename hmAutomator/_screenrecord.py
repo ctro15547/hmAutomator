@@ -41,8 +41,8 @@ class RecordClient(HmClient):
         
 
         # 横竖屏状态 竖屏 0 横屏 1
-        self.display_rotation = 0
         self.target_width, self.target_height = self.d.display_size
+        self.display_rotation = 0 if self.target_width < self.target_height else 1  # 获取一个当前的状态
 
         # 截图图片数据
         self.screenshot_data = bytearray()
@@ -67,21 +67,16 @@ class RecordClient(HmClient):
     
     # 屏幕旋转状态
     def _get_display_rotation(self):
-        time.sleep(3)  # 等待屏幕服务启动
-        if not self.screen_server_status:
-            assert False, "Screen server is not running."
-        
+        _tmp_display_rotation = self.display_rotation
         while not self._stop_event.is_set():
-            img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
-            if img is None or img.size == 0:
-                time.sleep(0.5)
-                continue
-            
-            x, y = img.shape[1], img.shape[0]
+            x, y = self.d.display_size  # 这个可以实时返回当前屏幕的宽高 0.1秒左右 所以可以用做状态监控
             if x < y:
                 self.display_rotation = 0
             else:
                 self.display_rotation = 1
+            if self.display_rotation != _tmp_display_rotation:
+                _tmp_display_rotation = self.display_rotation
+                self.target_width, self.target_height = self.d.display_size
             time.sleep(0.5)
 
     def _get_data(self, api: str, args: list):
@@ -118,7 +113,7 @@ class RecordClient(HmClient):
         reply: str = self._recv_msg(1024, decode=True, print=False)
         if "true" in reply:
             self._stop_event.clear()
-            record_th = threading.Thread(target=self._get_display_rotation)
+            record_th = threading.Thread(target=self._get_data)
             record_th.daemon = True
             record_th.start()
             rotation_th = threading.Thread(target=self._get_display_rotation)
@@ -161,18 +156,21 @@ class RecordClient(HmClient):
         
         img = None
 
+        video_id = 0
+        # 缩放比例
+        scale = 3.15
         # 分辨率
-        target_width = int(self.target_width * 0.5)
-        target_height = int(self.target_height * 0.5)
+        target_width = int(self.target_width / scale)
+        target_height = int(self.target_height / scale)
         # 质量
-        quality = 30
+        quality = 60
         # 帧率
-        fps = 10
+        fps = 8
         
         frame_count = 0
         
         # 确保使用AVI格式和MJPG编码器，提高可靠性
-        video_path = os.path.splitext(self.video_path)[0] + '.avi'
+        video_path = os.path.splitext(self.video_path)[0] + f'_{video_id}.avi'
         
         # 创建视频写入器
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
@@ -192,10 +190,29 @@ class RecordClient(HmClient):
         # 保存计时器
         save_interval = 10  # 每10秒记录一次日志
         last_save_time = time.time()
-        
+        _tmp_display_rotation = self.display_rotation
         while not self._record_event.is_set():
             current_time = time.time()
             start_time = current_time
+
+            if self.display_rotation != _tmp_display_rotation:
+                # 屏幕旋转了 需要重新创建视频写入器
+                _tmp_display_rotation = self.display_rotation
+                # 重新计算宽高
+                target_width = int(self.target_width / scale)
+                target_height = int(self.target_height / scale)
+                # 重新创建视频写入器
+                video_id += 1
+                video_path = os.path.splitext(self.video_path)[0] + f'_{video_id}.avi'
+                # 释放旧的写入器
+                cv2_instance.release()
+                cv2_instance = cv2.VideoWriter(
+                    video_path,
+                    fourcc,
+                    fps,
+                    (target_width, target_height)
+                )
+                logger.info(f"屏幕旋转了，重新创建视频写入器: {video_path}")
             
             try:
                 if self.screenshot_data is None:
@@ -243,7 +260,7 @@ class RecordClient(HmClient):
                     
             except Exception as e:
                 logger.error(f"处理视频帧时出错: {e}")
-                
+            
             time.sleep(max(0, 1 / fps - (time.time() - start_time)))
 
         # 录制结束，关闭资源
@@ -297,42 +314,33 @@ class RecordClient(HmClient):
         if self.screen_server_status:
             assert False, "Screen server is running."
 
-        img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
-        # 获取图片 xy
-        x, y = img.shape[1], img.shape[0]
-        if not self.display_rotation:
-            width, height = int(x / 4), int(y / 4)
-        else:
-            width, height = int(y / 4), int(x / 4)
-            
         _tmp_display_rotation = self.d.display_rotation
+        scale = 4
+        target_width = int(self.target_width / scale)
+        target_height = int(self.target_height / scale)
 
         window_name = f"Window_{self.serial}_{int(time.time())}"
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(window_name, width, height)  # 强制新尺寸
+        cv2.resizeWindow(window_name, target_width, target_height)  # 强制新尺寸
 
-        _count = 0
         while not self._show_phone_event.is_set() and self._show_phone_status:
             start_time = time.time()
-            _count += 1
 
             img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
             if img is None or img.size == 0:
                 time.sleep(0.1)
                 continue
 
-            if _count % 10 == 0 and self.display_rotation != _tmp_display_rotation:
+            if self.display_rotation != _tmp_display_rotation:
+                _tmp_display_rotation = self.display_rotation
                 # 重新计算宽高
-                if not self.display_rotation:
-                    width, height = int(x / 4), int(y / 4)
-                else:
-                    width, height = int(y / 4), int(x / 4)
+                target_width = int(self.target_width / scale)
+                target_height = int(self.target_height / scale)
                 # 旋转后交换窗口宽高
                 window_name = f"Window_{self.serial}_{int(time.time())}"
                 cv2.destroyWindow(window_name)
                 cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-                cv2.resizeWindow(window_name, width, height)
-                _tmp_display_rotation = self.display_rotation
+                cv2.resizeWindow(window_name, target_width, target_height)
 
             cv2.imshow(window_name, img)
             cv2.waitKey(0)

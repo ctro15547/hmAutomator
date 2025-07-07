@@ -195,7 +195,7 @@ class RecordClient(HmClient):
             current_time = time.time()
             start_time = current_time
 
-            if self.display_rotation != _tmp_display_rotation:
+            if frame_count % 10 == 0 and self.display_rotation != _tmp_display_rotation:
                 # 屏幕旋转了 需要重新创建视频写入器
                 _tmp_display_rotation = self.display_rotation
                 # 重新计算宽高
@@ -323,15 +323,17 @@ class RecordClient(HmClient):
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(window_name, target_width, target_height)  # 强制新尺寸
 
+        count = 0
         while not self._show_phone_event.is_set() and self._show_phone_status:
             start_time = time.time()
+            count += 1
 
             img = cv2.imdecode(np.frombuffer(self.screenshot_data, np.uint8), cv2.IMREAD_COLOR)
             if img is None or img.size == 0:
                 time.sleep(0.1)
                 continue
 
-            if self.display_rotation != _tmp_display_rotation:
+            if count % 20 == 0 and self.display_rotation != _tmp_display_rotation:
                 _tmp_display_rotation = self.display_rotation
                 # 重新计算宽高
                 target_width = int(self.target_width / scale)

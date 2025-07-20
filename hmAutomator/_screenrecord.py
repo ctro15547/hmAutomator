@@ -47,6 +47,9 @@ class RecordClient(HmClient):
         # 截图图片数据
         self.screenshot_data = bytearray()
 
+        # 录屏名称列表
+        self.video_path_list = []
+
     def __enter__(self):
         return self
 
@@ -171,7 +174,8 @@ class RecordClient(HmClient):
         
         # 确保使用AVI格式和MJPG编码器，提高可靠性
         video_path = os.path.splitext(self.video_path)[0] + f'_{video_id}.avi'
-        
+        self.video_path_list.append(video_path)
+
         # 创建视频写入器
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         cv2_instance = cv2.VideoWriter(
@@ -213,6 +217,7 @@ class RecordClient(HmClient):
                     (target_width, target_height)
                 )
                 logger.info(f"屏幕旋转了，重新创建视频写入器: {video_path}")
+                self.video_path_list.append(video_path)
             
             try:
                 if self.screenshot_data is None:
@@ -286,6 +291,8 @@ class RecordClient(HmClient):
     def stop_record(self):
         self._record_event.set()
         self._record_status = False
+        print('video_path_list', self.video_path_list)
+        return self.video_path_list
     
     def screenshot(self, path: str):
         if not self.screen_server_status:
@@ -339,13 +346,13 @@ class RecordClient(HmClient):
                 target_width = int(self.target_width / scale)
                 target_height = int(self.target_height / scale)
                 # 旋转后交换窗口宽高
-                window_name = f"Window_{self.serial}_{int(time.time())}"
+                # window_name = f"Window_{self.serial}_{int(time.time())}"
                 cv2.destroyWindow(window_name)
                 cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
                 cv2.resizeWindow(window_name, target_width, target_height)
 
             cv2.imshow(window_name, img)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
 
             time.sleep(max(0, 1 / 10 - (time.time() - start_time)))
 
